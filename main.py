@@ -371,13 +371,16 @@ if __name__ == "__main__":
     end = datetime.today()
     start = end - timedelta(days=15 * 365)
 
-    tickers = [
-        "ALFAA.MX", "ALSEA.MX", "AMXB.MX", "AC.MX", "BBAJIOO.MX", "GFNORTEO.MX", "BOLSAA.MX",
-        "CEMEXCPO.MX", "CHDRAUIB.MX", "KOFUBL.MX", "VESTA.MX", "LIVEPOLC-1.MX", "FEMSAUBD.MX", "LABB.MX", "GENTERA.MX",
-        "GRUMAB.MX", "OMAB.MX", "CUERVO.MX", "ASURB.MX", "BIMBOA.MX", "GCARSOA1.MX", "GCC.MX", "ELEKTRA.MX",
-        "GMEXICOB.MX", "GFINBURO.MX", "KIMBERA.MX", "MEGACPO.MX", "ORBIA.MX", "PE&OLES.MX", "PINFRA.MX", "GAPB.MX",
-        "Q.MX", "RA.MX", "TLEVISACPO.MX", "WALMEX.MX", "LACOMERUBC.MX"
-    ]
+    #tickers = [
+        #"AAPL", "MSFT", "GOOGL", "META", "IBM", "AMD", "INTC", "NVDA", "ORCL", "CSCO", "TXN",
+        #"JPM", "BAC", "WFC", "C", "GS", "MS", "USB", "AXP",
+        #"XOM", "CVX", "COP", "BP", "SHEL", "TTE",
+       # "WMT", "TGT", "COST", "HD", "LOW", "MCD", "SBUX", "KO", "PEP", "PG",
+      #  "UPS", "FDX", "CAT", "DE", "GE",
+     #   "JNJ", "PFE", "MRK", "ABBV", "ABT",
+    #    "BHP", "RIO", "FCX"
+   # ]
+    tickers = ['C','MS']
     precios = descargar_datos(tickers, start, end)
 
     # Split cronológico 60/20/20
@@ -385,7 +388,8 @@ if __name__ == "__main__":
     train = precios.iloc[:int(0.6 * n)]
     test = precios.iloc[int(0.6 * n):int(0.8 * n)]
     val = precios.iloc[int(0.8 * n):]
-
+    p = [train,  test,  val]
+    p_l = ['train', 'test', 'val']
     print(f"Fechas: start={precios.index[0].date()} end={precios.index[-1].date()}")
     print(f"Tamños: total={n}, train={len(train)}, test={len(test)}, val={len(val)}")
 
@@ -399,27 +403,30 @@ if __name__ == "__main__":
     resultados_all = []
     resumen_metrics = []
     for _, row in pares.iterrows():
-        A, B = row['A'], row['B']
-        # usar solo la porción test
-        df_pair_test = test[[A, B]].dropna()
-        lista_thresholds = np.linspace(0.5, 2.5, 15)
+        for i in range(len(p)):
+            print(f'Periodo de {p_l[i]}')
+            print("=" * 50)
+            A, B = row['A'], row['B']
+            # usar solo la porción test
+            df_pair_test = p[i][[A, B]].dropna()
+            lista_thresholds = np.linspace(0.5, 2.5, 15)
 
-        mejor, tabla = optimizar_threshold_entrada(
-            df_pair_test,
-            lista_thresholds,
-            criterio='retorno_acumulado'  # o 'sharpe', etc.
-        )
-        print("Tabla resumen:\n", tabla)
-        print("Mejor threshold_entrada:", mejor['threshold_entrada'])
-        print("Metrics del mejor:", mejor['metrics'])
-        df_hist_mejor = mejor['df_hist']
-        print(df_hist_mejor)
+            mejor, tabla = optimizar_threshold_entrada(
+                df_pair_test,
+                lista_thresholds,
+                criterio='retorno_acumulado'  # o 'sharpe', etc.
+            )
+            print("Tabla resumen:\n", tabla)
+            print("Mejor threshold_entrada:", mejor['threshold_entrada'])
+            print("Metrics del mejor:", mejor['metrics'])
+            df_hist_mejor = mejor['df_hist']
+            print(df_hist_mejor)
 
-    # Concatenar y mostrar equity finales
+            # Concatenar y mostrar equity finales
 
-    plt.plot(df_hist_mejor.index, df_hist_mejor['pv'], alpha=0.6)
-    plt.title('Equity curve por par (periodo test)')
-    plt.show()
+            plt.plot(df_hist_mejor.index, df_hist_mejor['pv'], alpha=0.6)
+            plt.title(f'Equity curve por par periodo {p_l[i]}')
+            plt.show()
 
 
 # total=3766:
