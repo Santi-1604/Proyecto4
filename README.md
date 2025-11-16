@@ -7,7 +7,7 @@ Este repositorio contiene el código principal de una estrategia de **pairs trad
 - Backtesting con cálculo de **equity curve**, métricas básicas de desempeño y gráficas por periodo (*train*, *test*, *val*)
 
 > 💡 **Importante:** para reproducir la estrategia solo se necesita el archivo `main.py`.  
-Para este solo se necesita el main fue para compartir los modelos de como usarlos entre yo y mi colaborador Jesus Garcia.
+Para este solo se necesita el main, el resto fue para compartir los modelos de como usarlos entre yo y mi colaborador Jesus Garcia.
 
 Por ultimo para usar el codigo solo se necesitan los requisitos de abajo y aparte solo correr el main, para repoducibilidad rapida comente la lista de tickers originales que hace la seleccion de pares y solo deje la que se uso al final del modelo, solo se necesita descomentar eso y borrar la linea abajo de tickers que solo contienen "C" "MS" y ya estara listo para correr el programa original
 
