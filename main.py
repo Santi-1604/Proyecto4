@@ -428,4 +428,4 @@ if __name__ == "__main__":
             plt.title(f'Equity curve por par periodo {p_l[i]}')
             plt.show()
 
-
+#d
