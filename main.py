@@ -1,20 +1,4 @@
-import numpy as np
-import yfinance as yf
 
-
-# ley de vida no te puede alcanzar solo para uno long o un short te debe alcansar para ambos
-# en la foto que tome
-#hedge ratio siempre positiv, para saber cuando comprar es n_shares_shorts, lo multiplicas el n_shares_long
-#theta de 0.5 a 2
-#desicion sequencial para el reporte
-# en las fotos las variables subrayadas
-#Kalman 3 solo controla theta la contribucion es el kalaman ratio de mi estrategia, el problema es maximizar moviendo pi
-#S0 son todos mis supuestos
-# en la foto del tercer modelo lo que tiene max es mi politica
-#Existe una funcion Fpi que depende de theta
-# EL objetivo del dos
-# EL objetivo del kalman 3 maximizar una ganancias
-# Solo pones todas las metricas del mejor pero mencionas todos los ratios.
 
 
 import numpy as np
@@ -272,15 +256,25 @@ def backtest_pair(df_pair,
 
         pv = cash + posiciones['A'] * pa + posiciones['B'] * pb
 
-        history.append({
+        fila_hist = {
             'fecha': fecha,
             'pv': pv,
             'cash': cash,
             'pos_A': posiciones['A'],
             'pos_B': posiciones['B'],
             'zscore': zscore,
-            'borrow_cost': borrow_cost
-        })
+            'borrow_cost': borrow_cost,
+            'alpha': alpha,
+            'beta': beta
+        }  # Eigenvectores (si ya tenemos vecm_params)
+        if vecm_params is not None:
+            fila_hist['vec1'] = vecm_params[0]
+            fila_hist['vec2'] = vecm_params[1]
+        else:
+            fila_hist['vec1'] = np.nan
+            fila_hist['vec2'] = np.nan
+
+        history.append(fila_hist)
 
     df_hist = pd.DataFrame(history).set_index('fecha')
     trades_df = pd.DataFrame(trades)
@@ -420,6 +414,8 @@ if __name__ == "__main__":
             print("Mejor threshold_entrada:", mejor['threshold_entrada'])
             print("Metrics del mejor:", mejor['metrics'])
             df_hist_mejor = mejor['df_hist']
+            trades_df_mejor = mejor['trades_df']
+            theta = mejor['threshold_entrada']
             print(df_hist_mejor)
 
             # Concatenar y mostrar equity finales
@@ -427,5 +423,68 @@ if __name__ == "__main__":
             plt.plot(df_hist_mejor.index, df_hist_mejor['pv'], alpha=0.6)
             plt.title(f'Equity curve por par periodo {p_l[i]}')
             plt.show()
+            # 1) Equity curve (valor del portafolio)
+            plt.figure(figsize=(12, 5))
+            plt.plot(df_hist_mejor.index, df_hist_mejor['pv'], alpha=0.6)
+            plt.title(f'Equity curve por par periodo {p_l[i]}')
+            plt.xlabel("Fecha")
+            plt.ylabel("Valor del portafolio (pv)")
+            plt.grid()
+            plt.show()
 
-#d
+            # 2) Z-Score del spread (después de equity)
+            plt.figure(figsize=(12, 5))
+            df_hist_mejor['zscore'].plot()
+            plt.axhline(theta, linestyle='--', label=f'Umbral Entrada (+θ={theta:.2f})')
+            plt.axhline(-theta, linestyle='--', label=f'Umbral Entrada (-θ={theta:.2f})')
+            plt.axhline(0, linestyle='--')
+            plt.title(f"Z-Score del spread – periodo {p_l[i]}")
+            plt.xlabel("Fecha")
+            plt.ylabel("Z-Score")
+            plt.grid()
+            plt.legend()
+            plt.show()
+
+            # 3) Hedge ratio (beta de Kalman)
+            if 'beta' in df_hist_mejor.columns:
+                plt.figure(figsize=(12, 5))
+                df_hist_mejor['beta'].plot(label='Beta (hedge ratio)')
+                plt.title(f"Hedge ratio (Kalman) – periodo {p_l[i]}")
+                plt.xlabel("Fecha")
+                plt.ylabel("β_t")
+                plt.grid()
+                plt.legend()
+                plt.show()
+
+            # 4) Retorno por trade (usando pv en cada fecha de trade)
+            if not trades_df_mejor.empty:
+                trades_df_mejor = trades_df_mejor.merge(
+                    df_hist_mejor[['pv']],
+                    left_on='fecha',
+                    right_index=True,
+                    how='left'
+                )
+                trades_df_mejor['retorno_por_trade'] = trades_df_mejor['pv'].pct_change()
+
+                plt.figure(figsize=(12, 5))
+                plt.bar(trades_df_mejor['fecha'], trades_df_mejor['retorno_por_trade'])
+                plt.axhline(0, linestyle='--')
+                plt.title(f"Retorno por trade – periodo {p_l[i]}")
+                plt.xlabel("Fecha")
+                plt.ylabel("Retorno por trade")
+                plt.grid()
+                plt.show()
+
+            # 5) Eigenvectores de Johansen (si se guardaron)
+            if 'vec1' in df_hist_mejor.columns and 'vec2' in df_hist_mejor.columns:
+                plt.figure(figsize=(12, 5))
+                df_hist_mejor['vec1'].plot(label='Eigenvector componente 1')
+                df_hist_mejor['vec2'].plot(label='Eigenvector componente 2')
+                plt.title(f"Eigenvectores Johansen – periodo {p_l[i]}")
+                plt.xlabel("Fecha")
+                plt.ylabel("Valor")
+                plt.grid()
+                plt.legend()
+                plt.show()
+
+
