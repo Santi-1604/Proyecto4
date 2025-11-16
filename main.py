@@ -410,15 +410,20 @@ plt.show()
 
 
 
+# Z-score
+plt.figure(figsize=(12,5))
+df_hist['zscore'].plot()
 
+plt.axhline(2, color='red', linestyle='--', label='Umbral Entrada (+2)')
+plt.axhline(-2, color='red', linestyle='--', label='Umbral Entrada (-2)')
+plt.axhline(0, color='black', linestyle='--')
 
-
-
-
-
-
-
-
+plt.title("Z-Score del Spread a Través del Tiempo")
+plt.xlabel("Fecha")
+plt.ylabel("Z-Score")
+plt.grid()
+plt.legend()
+plt.show()
 
 
 
