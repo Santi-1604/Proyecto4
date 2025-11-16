@@ -375,6 +375,54 @@ def optimizar_threshold_entrada(df_pair,
 
 
 
+# Hedge Ratio
+df_hist['alpha'].plot(figsize=(12,4), label='Alpha')
+df_hist['beta'].plot(figsize=(12,4), label='Beta')
+plt.legend()
+plt.title("Hedge Ratio Over Time")
+plt.grid()
+plt.show()
+
+
+
+# Eigenvector
+def plot_eigenvectors(df_hist):
+    mask = df_hist["eig_A"].notna()
+
+    plt.figure(figsize=(12,6))
+    plt.plot(df_hist.loc[mask, "eig_A"].values, label="Eigenvector A")
+    plt.plot(df_hist.loc[mask, "eig_B"].values, label="Eigenvector B")
+    plt.title("Primer Eigenvector de Johansen a Través del Tiempo")
+    plt.xlabel("Iteraciones del Backtest")
+    plt.ylabel("Valor del Eigenvector")
+    plt.grid(True)
+    plt.legend()
+    plt.show()
+
+
+
+# Retornos x Trade
+trades_df['retorno_trade'] = trades_df['delta_shares'] * trades_df['price']
+trades_df['retorno_trade'].hist(bins=30, figsize=(10,5))
+plt.title("Distribución de Retornos por Trade")
+plt.grid()
+plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 #######################
 # Ejemplo de ejecución: pipeline mínima (selección en train, backtest en test)
 if __name__ == "__main__":
