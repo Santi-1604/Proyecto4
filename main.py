@@ -2,7 +2,7 @@ import numpy as np
 import yfinance as yf
 
 
-# ley de vida no te puede alcanzar solo para uno long o un short te debe alcansar para ambos
+# ley de vida no te puede alcanzar solo para uno long o un short te debe alcanzar para ambos
 # en la foto que tome
 #hedge ratio siempre positiv, para saber cuando comprar es n_shares_shorts, lo multiplicas el n_shares_long
 #theta de 0.5 a 2
@@ -152,19 +152,26 @@ def seleccionar_pares(df, min_corr=0.7, p_adf=0.05, corr_window=60):
 
 
 # Backtest
-def backtest_pair(df_pair,
+    def backtest_pair(df_pair,
                   ventana_joh=VENTANA_JOHANSEN,
                   capital_inicial=CAPITAL_INICIAL,
                   comision=COMISION,
                   borrow_diario=BORROW_DIARIO,
                   allocation_frac=ALLOCATION_FRAC,
                   threshold_entrada=THRESHOLD_ENTRADA):
+
     df_pair = df_pair.dropna().copy()
+
     if df_pair.shape[1] != 2:
-        raise ValueError("df_pair debe tener exactamente 2 columnas [A,B].")
+        raise ValueError(f"df_pair debe tener 2 columnas, pero tiene {df_pair.shape[1]}: {df_pair.columns.tolist()}")
 
     A, B = df_pair.columns
     kalman = KalmanRegVECM()
+
+    alpha_list = []
+    beta_list = []
+    eigvec_list = []
+
     cash = capital_inicial
     posiciones = {'A': 0.0, 'B': 0.0}
     history = []
@@ -179,78 +186,83 @@ def backtest_pair(df_pair,
 
         kalman.predict()
 
-        # calcular err_vecm si es que existe vecm_params
         if vecm_params is not None:
             err_vecm = float(vecm_params[0] * pa + vecm_params[1] * pb)
         else:
             err_vecm = 0.0
 
-        # update kalman (x=B, y=A)
         if t > 0:
             kalman.update_with_vecm(pb, pa, err_vecm)
         else:
             kalman.update(pb, pa)
 
         alpha, beta = kalman.params
-        spread = (pa *alpha + beta * pb)
+        alpha_list.append(alpha)
+        beta_list.append(beta)
+
+        spread = (pa * alpha + beta * pb)
         spread_list.append(spread)
 
-        # recalcular Johansen cada ventana_joh
+        # CÁLCULO DE JOHANSEN 
         if t >= ventana_joh:
-            sub = df_pair.iloc[t - ventana_joh:t]
-            # forzar 2D con las 2 columnas del par
-            sub_2d = sub[[A, B]].dropna()
-            if sub_2d.shape[0] >= 10 and sub_2d.shape[1] == 2:
+            sub = df_pair.iloc[t - ventana_joh:t][[A, B]].dropna()
+
+            if sub.shape[0] >= 20:
                 try:
-                    joh = coint_johansen(sub_2d.values, det_order=0, k_ar_diff=2)
+                    joh = coint_johansen(sub.values, 0, 2)
                     vec = joh.evec[:, 0]
-                    # Normalizar convención (hacer coef de B = 1 si posible)
+
+                    # Normalize
                     if abs(vec[1]) > 1e-12:
                         vec = vec / vec[1]
-                    vecm_params = vec
-                except Exception as e:
-                    print(f"[⚠️] Error en Johansen para {A}-{B} en t={t}: {e}")
-                    vecm_params = None
-            else:
-                vecm_params = None
 
-        # Z-Score
+                    vecm_params = vec
+                    eigvec_list.append(vec.tolist())
+
+                except Exception:
+                    eigvec_list.append([None, None])
+            else:
+                eigvec_list.append([None, None])
+        else:
+            eigvec_list.append([None, None])
+
+        # Z-score
         if len(spread_list) >= VENTANA_ZSCORE:
-            mu = np.mean(spread_list[-VENTANA_ZSCORE:])
-            sigma = np.std(spread_list[-VENTANA_ZSCORE:], ddof=1)
+            window = spread_list[-VENTANA_ZSCORE:]
+            mu = np.mean(window)
+            sigma = np.std(window, ddof=1)
             zscore = (spread - mu) / sigma if sigma > 0 else 0.0
         else:
             zscore = 0.0
 
-        # Target shares según la señal
-        target_shares = {'A': posiciones['A'], 'B': posiciones['B']}  # por defecto hold
+        target_shares = {'A': posiciones['A'], 'B': posiciones['B']}
+
         if zscore > threshold_entrada:
-            # SHORT spread: short A, long B
             asign_total = allocation_frac * cash
-            asign_cada = asign_total / 2.0
-            target_shares['A'] = - (asign_cada / pa)
-            target_shares['B'] = (asign_cada / pb)
+            asign_cada = asign_total / 2
+            target_shares['A'] = -(asign_cada / pa)
+            target_shares['B'] = +(asign_cada / pb)
 
         elif zscore < -threshold_entrada:
-            # LONG spread: long A, short B
             asign_total = allocation_frac * cash
-            asign_cada = asign_total / 2.0
-            target_shares['A'] = (asign_cada / pa)
-            target_shares['B'] = - (asign_cada / pb)
+            asign_cada = asign_total / 2
+            target_shares['A'] = +(asign_cada / pa)
+            target_shares['B'] = -(asign_cada / pb)
+
         elif abs(zscore) < THRESHOLD_SALIDA:
-            # neutral -> cerrar (target 0)
             target_shares['A'] = 0.0
             target_shares['B'] = 0.0
 
-        # Ejecutar trades por delta_shares (A y B)
+        # Ejecutar
         for tkr, price in [('A', pa), ('B', pb)]:
             delta = target_shares[tkr] - posiciones[tkr]
             if abs(delta) > 1e-12:
                 trade_value = abs(delta) * price
                 commission = trade_value * comision
-                # actualizar cash por compra/venta
+
                 cash -= delta * price
                 cash -= commission
+
                 trades.append({
                     'fecha': fecha,
                     'ticker': (A if tkr == 'A' else B),
@@ -260,14 +272,15 @@ def backtest_pair(df_pair,
                     'commission': commission,
                     'cash_after': cash
                 })
+
                 posiciones[tkr] = target_shares[tkr]
 
-        # Coste de préstamo diario (restar del cash)
         borrow_cost = 0.0
         if posiciones['A'] < 0:
             borrow_cost += abs(posiciones['A']) * pa * borrow_diario
         if posiciones['B'] < 0:
             borrow_cost += abs(posiciones['B']) * pb * borrow_diario
+
         cash -= borrow_cost
 
         pv = cash + posiciones['A'] * pa + posiciones['B'] * pb
@@ -283,29 +296,34 @@ def backtest_pair(df_pair,
         })
 
     df_hist = pd.DataFrame(history).set_index('fecha')
+
+    # Guardamos alpha y beta
+    df_hist["alpha"] = alpha_list
+    df_hist["beta"] = beta_list
+
+    # Guardamos eigenvectors
+    eigA = [v[0] for v in eigvec_list]
+    eigB = [v[1] for v in eigvec_list]
+    df_hist["eig_A"] = eigA
+    df_hist["eig_B"] = eigB
+
     trades_df = pd.DataFrame(trades)
 
-    # Métricas básicas
-    df_hist['retornos'] = df_hist['pv'].pct_change().fillna(0)
-    retorno_acum = df_hist['pv'].iloc[-1] / capital_inicial - 1.0
-    periodo = len(df_hist)
-    retorno_anual = (1 + retorno_acum) ** (DIAS_TRADING / periodo) - 1 if periodo > 0 else np.nan
-    vol_anual = df_hist['retornos'].std() * np.sqrt(DIAS_TRADING) if periodo > 1 else np.nan
-    sharpe = retorno_anual / vol_anual if vol_anual and vol_anual != 0 else np.nan
-    running_max = df_hist['pv'].cummax()
-    drawdown = (df_hist['pv'] - running_max) / running_max
-    max_dd = drawdown.min()
+    # Métricas
+    df_hist["retornos"] = df_hist["pv"].pct_change().fillna(0)
+    retorno_acum = df_hist["pv"].iloc[-1] / capital_inicial - 1
+    vol_anual = df_hist["retornos"].std() * np.sqrt(252)
+    sharpe = retorno_acum / vol_anual if vol_anual > 0 else np.nan
 
     metrics = {
-        'retorno_acumulado': retorno_acum,
-        'retorno_anualizado': retorno_anual,
-        'volatilidad_anualizada': vol_anual,
-        'sharpe': sharpe,
-        'max_drawdown': max_dd,
-        'n_trades': len(trades_df)
+        "retorno_acumulado": retorno_acum,
+        "volatilidad_anualizada": vol_anual,
+        "sharpe": sharpe,
+        "n_trades": len(trades_df)
     }
 
     return df_hist, trades_df, metrics
+
 
 def optimizar_threshold_entrada(df_pair,
                                 lista_thresholds,
@@ -315,17 +333,10 @@ def optimizar_threshold_entrada(df_pair,
                                 borrow_diario=BORROW_DIARIO,
                                 allocation_frac=ALLOCATION_FRAC,
                                 criterio='retorno_acumulado'):
-    """
-    Optimiza el threshold_entrada para maximizar una métrica específica.
-    Retorna:
-        - mejor: dict con mejor threshold + df_hist + trades_df + metrics
-        - tabla_resultados: DataFrame con métricas de cada threshold
-        - todos_hist: dict {threshold → df_hist correspondiente}
-    """
 
     resultados = []
     mejor = None
-    todos_hist = {}     # ⭐ AQUI guardamos todos los históricos
+    todos_hist = {}     # AQUÍ guardamos todos los históricos
 
     for th in lista_thresholds:
 
@@ -339,10 +350,10 @@ def optimizar_threshold_entrada(df_pair,
             threshold_entrada=th
         )
 
-        # Guardamos histórico completo para este threshold
+        # Se guarda el histórico completo para este threshold
         todos_hist[th] = df_hist.copy()
 
-        # Guardamos métricas en una fila de resumen
+        # Se guarda métricas en una fila de resumen
         fila = {'threshold_entrada': th}
         fila.update(metrics)
         resultados.append(fila)
