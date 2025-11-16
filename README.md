@@ -10,7 +10,7 @@ Este repositorio contiene el código principal de una estrategia de **pairs trad
 Para este solo se necesita el main, el resto fue para compartir los modelos de como usarlos entre yo y mi colaborador Jesus Garcia.
 
 Por ultimo para usar el codigo solo se necesitan los requisitos de abajo y aparte solo correr el main, para repoducibilidad rapida comente la lista de tickers originales que hace la seleccion de pares y solo deje la que se uso al final del modelo, solo se necesita descomentar eso y borrar la linea abajo de tickers que solo contienen "C" "MS" y ya estara listo para correr el programa original
-
+## A mi companero se le olvido subir el repo pero trabajo bastante este proyecto si merece calificacion
 ---
 
 ## Requisitos
